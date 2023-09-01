@@ -1,0 +1,214 @@
+---
+title: "MA331-Coursework"
+author: "2110374-Nuttarun-Kunratvej"
+subtitle: Text analytics of the TED talks by Allan Adams and Chris Anderson
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+### Don't delete this setup code chunk from your file
+knitr::opts_chunk$set(echo = FALSE,error=FALSE,warning = FALSE,message = FALSE)   ## DON'T ALTER THIS: this is to prevent printing the code in your "html" file.
+
+# Extend the list below to load all the packages required for your analyses here:
+#===============================================================================
+library(tidyverse)
+library(tidytext)
+library(stopwords)
+library(ggrepel)
+library(scales)
+library(plotly)
+library(here)
+require(dsEssex)
+library(ggrepel)
+library(dplyr)
+# load the 'ted_talks' data
+#=========================
+data("ted_talks")
+
+#filter the speaker that have assign
+mydata = ted_talks %>% filter(speaker %in% c("Allan Adams","Chris Anderson"))
+
+#token word and pull the connecting word out
+single_word <- mydata %>% unnest_tokens(word, text) %>% anti_join(get_stopwords())
+```
+
+## Introduction
+
+This project proposes to analyze the similarity and differences between the content of two speakers and also the sentiment of the speaker toward the topic they presented. The data come from ted_talk data in R programming which this report will filter only two speakers and four different headings. First, in March 2014, Allan Adams made speeches about the discovery of smoking-gun evidence which led to the answer of the Big Bang theory. The speaker provides information on gravitational waves or the ring of the elementary universe. In February 2016,  Adams indicated the second topic about the collision of black holes creating energies and waves which led to the build of a laser detector called LIGO to explore this group of waves. When Chris Anderson (2002) states about the business term of the TED organization and the company plan to be a nonprofit organization that will support the social issues related to Sampling foundations interest. In February 2004, Chris Anderson raised the ‘Technology's long tail’ topics and the four successful stages; appropriate price, market trend, displaced initial technology, and the product will be in demand. 
+
+
+
+## Methods
+
+The steps that will be followed in this project are to analyze the frequency words used by both speakers in ted_talks data and order the top list words and will extract the unimportant words to make the result more accurate. Then, compare the different words in the data using table and visualization respectively. Next, the project will demonstrate the association between two speakers and their sentiment towards the words in the narrative using the logs-odds ratio method. The last part will also represent the sentiment of two speakers, but the part will group the result using headlines and show the outcome in the positive and negative categories. The lexicon applied in this part is the ‘bing’ lexicon categorizes words.
+
+
+
+
+## Results
+
+### Word frequencies
+
+```{r}
+#filter word from Adams talks and sort the frequencies of the word
+Adams_words = single_word %>% 
+  filter(speaker %in% c("Allan Adams")) %>%
+  count(speaker,word, sort = TRUE)
+
+#filter word from Anderson talks and sort the frequencies of the word
+Anderson_words = single_word %>% 
+  filter(speaker %in% c("Chris Anderson")) %>%
+  count(speaker, word, sort = TRUE)
+```
+
+```{r}
+#combine Adams and Anderson rows 
+combine_two = bind_rows(Adams_words,Anderson_words) %>%
+#sort top 25 words by speaker column
+  group_by(speaker) %>%
+  slice_max(n, n = 25) %>%
+  mutate(word = reorder(word, n)) %>%
+  ungroup()
+
+#split speaker column and insert 0 if the values is NA
+combine_two %>% pivot_wider(names_from = speaker, values_from = n, values_fill = 0) 
+
+```
+This table shows the frequency of the most spoken word listed in descending order which can tell the essence of the data set and the material of the representation. It can be seen from the table that Adams emphasizes the set of words related to scientific terms, while Anderson's value is in the financial and business terms. Although there are some similar words, they are simple conjunctions and quantified words. These also can show the story of the talks; Adams usually talks about universe and inform the knowledge to the audience and Adersons seem to talks more about the financial and business.
+
+```{r}
+
+#combine Adams and Anderson data to find the word that have summation greater than 10 
+dplyr::bind_rows(Adams_words, Anderson_words) %>%
+  group_by(word) %>%
+  filter(sum(n) > 10) %>%
+  ungroup() %>%
+  pivot_wider(names_from = "speaker", values_from = "n", values_fill = 0) %>%
+#plot a scatter plot graph with Anderson at x-axis and Adams at y-axis
+  ggplot(aes(`Chris Anderson`, `Allan Adams`)) +
+#make a dotted line with green color
+  geom_abline(color = "#1a9850", size = 1.2, alpha = 0.75, lty = 3) +
+#show the point as a word
+  geom_text_repel(aes(label = word), max.overlaps = 30) + 
+#title the graph
+  labs(title = "Similar words using by the speakers") + 
+#select theme for the background
+  theme_bw() +
+#select the position of the text and make it bold
+  theme(plot.title = element_text(hjust = 0.5,size = 12, face = "bold")) +
+#fixed the scale
+  coord_fixed()
+```
+
+This part illustrates the visualization of the table above which could be analyzed from the dotted line showing the words spoken by two speakers and have a similar approximation even though those words are not in the top lists frequency words, evident from word 'stuff', Adams use it 5th times, Anderson uses it 6th times, nevertheless it is the nearest word approach to the line. However, the words far away from the dotted line seem to be the words applied in only one speaker and that can be predicted what is the main concept in the talks. Adams interested in gravitational and scientific terms while Adams talks about the technologies, price and business values.
+
+
+### Sentiment Analyze
+
+```{r}
+#combine Adams and Anderson data and make new column called person
+bind = bind_rows(Anderson_words %>% mutate(person = "Anderson"), Adams_words %>% mutate(person = "Adams"))
+
+#use nrc lexicon function to group the sentiment word 
+(OR = bind %>% inner_join(get_sentiments("nrc"), by = "word") %>%
+#count number of sentiment in each person
+  count(person, sentiment) %>%
+#wider the data
+  pivot_wider(names_from = person, values_from = n, values_fill = 0) %>%
+#make new column of odds ratio and log-odds ratio
+  mutate(OR = dsEssex::compute_OR(Adams, Anderson, correction = FALSE), log_OR = log(OR), sentiment = reorder(sentiment, log_OR))) 
+```
+
+The comparison between two speakers and their sentiment in this project use the log-odds method together with ‘nrc’ lexicon categories words. From the table can be divided the level of emotion into various classes which is the advantage of using ‘nrc’ lexicons function since this command provides a diverse moods section compared to others. Anderson seem to have more word lists as his talks took exceeding time. However, from the calculate the odds ratio method, some groups of mood appear more in Adams. This happens because the odds method computes the probability and total word of each speaker. An example of analysing this odds method is the anticipation mood was used 23.7% less and positive mood was used 28% more in Adams talks.
+
+```{r}
+#plot sentiment and log-odds then fill log_OR
+OR %>% ggplot(aes(log_OR, sentiment, fill = log_OR < 0)) +
+#don't show the legend
+  geom_col(show.legend = FALSE) +
+#specify y-axis and graph
+  ylab("Log odds ratio") + ggtitle("The association between speaker and sentiment") +
+#choose theme for background
+  theme_bw() +
+#specify the character
+  theme(plot.title = element_text(hjust = 0.5,size = 12, face = "bold")) + 
+#choose and fill the color
+  scale_fill_manual(values = c("#66c2a5", "#fee08b"))
+
+```
+
+
+This bar chart visualizes a log-odds method evaluated from the table above. The log-odds ratio is almost calculated together with confident intervals and it provides the same result with an odds ratio. The green figure shows the result when Adams is more valuable than Anderson opposite from the yellow ones. Anderson seem to expect the anticipation experience from the audience while Adams more concern on trust from the audience since he talks about the discovering of new theories and scientific terms.
+
+```{r}
+#filter Adams talks
+Adams_talks = ted_talks %>% 
+  filter(speaker %in% c("Allan Adams"))
+
+#filter Anderson talks
+Aderson_talks = ted_talks %>% 
+  filter(speaker %in% c("Chris Anderson"))
+
+#combine Adams and Anderson
+talks <- bind_rows(Adams_talks, Aderson_talks)
+
+```
+
+
+```{r}
+#group headlines and make new column of word number
+bing_words <- single_word %>%
+  group_by(headline) %>% 
+  mutate(word_number = row_number()) %>%
+  ungroup() %>%
+#use bing to pull the words out
+  inner_join(get_sentiments("bing"))
+```
+
+```{r}
+#make a table and counting the headlines
+(bing_count <- bing_words %>%
+    count(headline, sentiment))
+```
+
+The ‘bing’ lexicon was used in this table to show the positive and negative reactions of each headline spoken by Adams and Anderson. The difference between the word count of Anderson would be more evident due to the content which suggests the benefit and worth advice for the audience whereas Adams appear to make an academic presentation and some discoveries approaching this past few years. 
+
+```{r}
+#count number of positive and negative words
+bing_word_counts <- bing_words %>%
+  count(word, sentiment)
+```
+
+```{r}
+#group word by sentiment and order the word
+topword_sort <- bing_word_counts %>%
+  group_by(sentiment) %>%
+  slice_max(n, n = 20) %>%
+  mutate(word = reorder(word, n)) %>%
+  ungroup()
+```
+
+```{r}
+bing_words %>%
+  #count words by 4 section and group 30 row of words to be in index function
+  count(headline, speaker, index = word_number %/% 30 , sentiment) %>%
+  #make the table wider
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  #create new column of difference between positive and negative
+  mutate(sentiment = positive - negative) %>%
+  #plot a graph and fill the color in speaker
+  ggplot(aes(index, sentiment, fill = speaker)) +
+  geom_col() +
+  #separate each headlines
+  facet_wrap(~ headline, scales = "free_x") +
+  #design a background
+  theme_bw()
+```
+
+The four figures show the sentiment towards the headlines of each speaker by combining the word into a group of 30 words before using the ‘bing’ lexicon categories words consequently some indexes would be disappearing due to the elimination of the lexicon function. The analyze also consistent with the table above that show the positive and negative word frequencies. This allows us to see details of each part of the speech and be able to identify the part that we are interested in. Obviously, in graph 1, Andersons talks about the technologies in long-tail which there might be some part that he talks about the price that too expensive or too cheap of technologies business whereas in his second talk he encourages people to believe in TEDs and provide meaningful messages to persuade the audience therefore his talks seem to be positively. While, Adams provide information about the discovery of new theory in both of his talks so he might be talking as neutral and pointing out some benefit, but some words in his talks might be accidentally interpreted by the lexicon to be negative such as adding emotion to stimulate the audience's interest.
+
+
+## Discussion
+
+To conclude, these two speakers have launched different kinds of topics which can be assumed in the word frequencies part. Nonetheless, individual speaker seems to raise a nearly similar presentation since groups of top words in each speaker can be analysed in the same way. While the sentimental part reveals the truth of the speaking which make the audience recognize the message speaker want to inform. The limitation of this project would come from the lexicon function which pulls out several words, this may cause the wrong interpretation. Secondly, the data used in this project is the data from various fields, thus it may be completely non-similar content. The challenge is that some of the acquired subjects are out of my interest besides this might cause the lack of confidence to make an analysis. An investigation emotions of the speaker from the sounds wave sound intriguing as some words detect may be rather positive and negative and hard to determine the accurate outcome. 
